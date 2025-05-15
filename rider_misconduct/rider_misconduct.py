@@ -4,7 +4,20 @@ import re
 import asyncio
 import openai
 from io import BytesIO
-import os
+import pdb
+
+# pdb.set_trace()
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,  # or INFO
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+logger = logging.getLogger(__name__)
+
+logger.info("This is an info log")
+logger.debug("This is a debug log")
 
 # Set your OpenAI key here
 openai.api_key = st.secrets["OPENAI_API_KEY"]
@@ -16,13 +29,16 @@ st.title("🚨 Rider Misconduct Scorer")
 
 uploaded_file = st.file_uploader("Upload a CSV (must have a 'feedback' column)", type="csv")
 
+
 # Better regex: only matches 0-10
 def extract_score(text: str):
     match = re.search(r"\b(10|[0-9])\b", text)
     return int(match.group()) if match else None
 
+
 async def get_score_async(feedback):
     try:
+        logger.info("This is an info log inside score async")
         response = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -68,47 +84,61 @@ async def get_score_async(feedback):
             ],
             temperature=0,
         )
+        # pdb.set_trace()
         content = response.choices[0].message.content.strip()
         score = extract_score(content)
         if score is None:
+            # pdb.set_trace()
+            logger.info("This is an info log when score is none")
             print(f"⚠️ Couldn't extract score from: {content}")
         return score
     except Exception as e:
+        # pdb.set_trace()
+        logger.info("This is an info log when exception has occurred")
         print(f"❌ Error for: {feedback[:30]}... → {e}")
         return None
+
 
 async def process_all_feedback(feedbacks):
     tasks = [get_score_async(fb) for fb in feedbacks]
     return await asyncio.gather(*tasks)
 
-if uploaded_file:
-    try:
-        df = pd.read_csv(uploaded_file)
 
-        if "feedback" not in df.columns:
-            st.error("CSV must contain a 'feedback' column.")
-        else:
-            # Clean feedback
-            df["feedback"] = df["feedback"].astype(str)
-            df = df[df["feedback"].str.strip().str.len() > 3]
+def classify_feedbacks():
+    # pdb.set_trace()
+    logger.info("This is an info log inside classify feedbacks")
+    if uploaded_file:
+        try:
+            df = pd.read_csv(uploaded_file)
+            logger.info("reading csv")
+            if "feedback" not in df.columns:
+                st.error("CSV must contain a 'feedback' column.")
+            else:
+                # Clean feedback
+                df["feedback"] = df["feedback"].astype(str)
+                df = df[df["feedback"].str.strip().str.len() > 3]
+                logger.info("***** cleaning feedback *******")
 
-            if st.button("Score Feedback"):
-                with st.spinner("Scoring feedbacks... please wait ⏳"):
-                    scores = asyncio.run(process_all_feedback(df["feedback"].tolist()))
-                    df["misconduct_score"] = scores
-                    st.success("✅ Done! See below:")
-                    st.dataframe(df)
+                if st.button("Score Feedback"):
+                    with st.spinner("Scoring feedbacks... please wait ⏳"):
+                        scores = asyncio.run(process_all_feedback(df["feedback"].tolist()))
+                        df["misconduct_score"] = scores
+                        st.success("✅ Done! See below:")
+                        st.dataframe(df)
 
-                    buffer = BytesIO()
-                    df.to_csv(buffer, index=False)
-                    buffer.seek(0)
+                        buffer = BytesIO()
+                        df.to_csv(buffer, index=False)
+                        buffer.seek(0)
 
-                    st.download_button(
-                        label="📥 Download CSV with Scores",
-                        data=buffer,
-                        file_name="scored_feedbacks.csv",
-                        mime="text/csv",
-                    )
+                        st.download_button(
+                            label="📥 Download CSV with Scores",
+                            data=buffer,
+                            file_name="scored_feedbacks.csv",
+                            mime="text/csv",
+                        )
 
-    except Exception as e:
-        st.error(f"Something went wrong: {e}")
+        except Exception as e:
+            logger.info("This is an info log when exception has occurred before reading csv")
+            st.error(f"Something went wrong: {e}")
+    else:
+        logger.info("This is an info log when uploaded file is not there")
